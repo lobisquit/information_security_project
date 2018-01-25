@@ -1,7 +1,5 @@
 #include <fstream>
 #include <iostream>
-#include <sstream>
-#include <string>
 
 #include <gmp.h>
 #include <gmpxx.h> // needed for C++ adapter
@@ -80,12 +78,11 @@ void generate_pairing_file(unsigned int rbits, unsigned int qbits, unsigned int 
 	} while(!found);
 
 	// build output file name using seed as parameter
-	ostringstream name_stream;
-	name_stream << "a-seed=" << seed << ".param";
-	string name = name_stream.str();
+	char name_buf[50];
+	sprintf(name_buf, "a-seed=%d.param", seed);
 
 	ofstream conf_file;
-	conf_file.open(name);
+	conf_file.open(name_buf);
 
 	// create conf file, suitable for PBC parameter
 	// specification

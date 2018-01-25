@@ -1,3 +1,3 @@
 all: trial.cpp
-	g++ trial.cpp -I/usr/include/pbc/ -lpbc -lgmpxx -lgmp
+	g++ -std=c++98 trial.cpp -I/usr/include/pbc/ -lpbc -lgmpxx -lgmp
 	./a.out
