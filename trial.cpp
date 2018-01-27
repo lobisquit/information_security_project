@@ -9,8 +9,6 @@
 
 using namespace std;
 
-typedef unsigned char uchar;
-
 inline uint to_uint(mpz_class input) {
 	return mpz_get_ui(input.get_mpz_t());
 }
@@ -59,8 +57,8 @@ string generate_pairing_file(uint rbits, uint qbits, uint seed) {
 		// r is NOT prime with probability less than 4^-50
 		// so probably it is prime
 		if (mpz_probab_prime_p(r.get_mpz_t(), 50)) {
-			/* try to find h such that
-			 * - r*h=q+1
+			/* try ten times to find h such that
+			 * - r * h = q + 1
 			 * - r, q are primes
 			 * - h is multiple of 12
 			 */
@@ -107,7 +105,7 @@ string generate_pairing_file(uint rbits, uint qbits, uint seed) {
 
 mpz_class sha256(mpz_class input) {
 	// initialize suitable hasher
-	uchar hash[SHA256_DIGEST_LENGTH];
+	unsigned char hash[SHA256_DIGEST_LENGTH];
 	SHA256_CTX sha256;
 	SHA256_Init(&sha256);
 
