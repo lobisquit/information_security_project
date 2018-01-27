@@ -11,7 +11,7 @@ inline uint to_uint(mpz_class input) {
 	return mpz_get_ui(input.get_mpz_t());
 }
 
-void generate_pairing_file(uint rbits, uint qbits, uint seed) {
+string generate_pairing_file(uint rbits, uint qbits, uint seed) {
 	bool found = false;
 
 	mpz_class q, r, h, exp1, exp2;
@@ -97,13 +97,31 @@ void generate_pairing_file(uint rbits, uint qbits, uint seed) {
 	conf_file << "sign1 "  << sign1 << "\n";
 
 	conf_file.close();
+
+	return string(name_buf);
 }
 
-int main(int argc, char** argv) {
-	gmp_randclass rng(gmp_randinit_default);
-	rng.seed(time(NULL));
-	mpf_class number = rng.get_f();
-	std::cout << number << "\n";
+int main (int argc, char** argv) {
+	uint seed = 1;
+	string output_file = generate_pairing_file(100, 200, seed);
+	cout << "'" << output_file << "'\n";
 
-	generate_pairing_file(100, 200, 1);
+	// setup crypto pairing given generated spec
+	pairing_t pairing;
+
+	// read configuration file in a C-style buffer
+	ifstream conf_file;
+	conf_file.open(output_file.c_str());
+
+	string line, content;
+	while (getline(conf_file, line)) {
+		content += line + "\n";
+	}
+
+	pairing_init_set_buf(pairing, content.c_str(), content.length());
+
+	element_t P;
+	element_init_G1(P, pairing);
+	element_random(P);
+	element_printf("P = %B\n", P);
 }
