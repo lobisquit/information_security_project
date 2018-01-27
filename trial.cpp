@@ -106,44 +106,36 @@ string generate_pairing_file(uint rbits, uint qbits, uint seed) {
 }
 
 mpz_class sha256(mpz_class input) {
-	string input_string = input.get_str();
-
-	// intermediate structures
-	uchar hash[SHA256_DIGEST_LENGTH];
-
 	// initialize suitable hasher
+	uchar hash[SHA256_DIGEST_LENGTH];
 	SHA256_CTX sha256;
 	SHA256_Init(&sha256);
+
+	// compute against input
+	string input_string = input.get_str();
 	SHA256_Update(&sha256, input_string.c_str(), input_string.length());
 	SHA256_Final(hash, &sha256);
 
-	// each of SHA256_DIGEST_LENGTH pieces has 8 bits, so
-	mpz_class output;
-
-	uint bit_mask, bit_index, exponent;
-	uchar current;
-	for (int i = SHA256_DIGEST_LENGTH; i >= 0; i--) {
-		// cycle throgh each bit in hash[i], using bit_mask
-		current = hash[i];
-		bit_mask = 0b1;
-
-		for (bit_index = 7; bit_index > 0; bit_index--) {
-			if (current & bit_mask == 1) {
-				exponent = i * 8 + bit_index;
-				mpz_setbit(output.get_mpz_t(), exponent);
-			}
-			// this mask always shows the bit_index-th bit
-			// in all little endian architecture
-			bit_mask << 1;
-		}
+	// convert buffer to hexadecimal representation
+	char output_buffer[65];
+	for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+		// note that each group of 8 bits is converted
+		// into two hexadecimal digits (as format)
+		sprintf(&output_buffer[i * 2], "%02x", hash[i]);
 	}
+	// overwrite last bit
+    output_buffer[64] = 0;
+
+	// convert to mpz number from hexadecimal representation
+	mpz_class output;
+	output = "0x" + string(output_buffer);
 	return output;
 }
 
 int main (int argc, char** argv) {
 	uint seed = 1;
 	string output_file = generate_pairing_file(100, 200, seed);
-	cout << "'" << output_file << "'\n";
+	// cout << "'" << output_file << "'\n";
 
 	// setup crypto pairing given generated spec
 	pairing_t pairing;
@@ -162,7 +154,15 @@ int main (int argc, char** argv) {
 	element_t P;
 	element_init_G1(P, pairing);
 	element_random(P);
-	element_printf("P = %B\n", P);
+	// element_printf("P = %B\n", P);
 
-	cout << sha256(10) << "\n";
+	mpz_class x = 11;
+	cout << "input: " << x.get_str() << "\n";
+	cout << hex << sha256(x) << "\n";
+
+	// precomputed
+	mpz_class other;
+	other = "0x4fc82b26aecb47d2868c4efbe3581732a3e7cbcc6c2efb32062c08170a05eeb8";
+	cout << hex << other << "\n";
+
 }
