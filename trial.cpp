@@ -111,15 +111,14 @@ void sha256(unsigned char output[SHA256_DIGEST_LENGTH],
 	SHA256_Final(output, &sha256);
 }
 
-void sha256(mpz_class output, mpz_class input) {
+void sha256(mpz_class* output, mpz_class input) {
 	unsigned char hash[SHA256_DIGEST_LENGTH];
-	string input_str = input.get_str();
 	sha256(hash,
-		   (unsigned char*) input_str.c_str(),
-		   input_str.length());
+		   (unsigned char*) input.get_str().c_str(),
+		   input.get_str().length());
 
 	// read hash bitstream and convert to mpz_class directly
-	mpz_import(output.get_mpz_t(), sizeof(hash), 1,
+	mpz_import(output->get_mpz_t(), sizeof(hash), 1,
 			   sizeof(hash[0]), 0, 0, hash);
 }
 
@@ -138,34 +137,40 @@ void sha256(element_t output, element_t input) {
 	element_from_hash(output, output_buffer, 64);
 }
 
-int main (int argc, char** argv) {
-	uint seed = 1;
-	string output_file = generate_pairing_file(100, 200, seed);
-	// cout << "'" << output_file << "'\n";
+void setup_pairing(pairing_t pairing, string pairing_file) {
+	ifstream conf_stream;
+	conf_stream.open(pairing_file.c_str());
 
-	// setup crypto pairing given generated spec
-	pairing_t pairing;
-
-	// read configuration file in a C-style buffer
-	ifstream conf_file;
-	conf_file.open(output_file.c_str());
-
+	// collect all file content
 	string line, content;
-	while (getline(conf_file, line)) {
+	while (getline(conf_stream, line)) {
 		content += line + "\n";
 	}
+	conf_stream.close();
 
 	pairing_init_set_buf(pairing, content.c_str(), content.length());
+}
 
-	element_t P;
-	element_init_G1(P, pairing);
-	element_set0(P);
+int main (int argc, char** argv) {
+	uint seed = 1;
+
+	// setup crypto pairing given generated spec
+	string output_file = generate_pairing_file(100, 200, seed);
+	pairing_t pairing;
+	setup_pairing(pairing, output_file);
+
+	mpz_class x = 10;
+	mpz_class y;
+	sha256(&y, x);
+	cout << hex << y << "\n";
+	// element_t P;
+	// element_init_G1(P, pairing);
+	// element_random(P);
+
+    // element_t H;
+	// element_init_G1(H, pairing);
+
+	// sha256(H, P);
 	// element_printf("P = %B\n", P);
-
-    element_t H;
-	element_init_G1(H, pairing);
-
-	sha256(H, P);
-	element_printf("P = %B\n", P);
-	element_printf("H = %B\n", H);
+	// element_printf("H = %B\n", H);
 }
