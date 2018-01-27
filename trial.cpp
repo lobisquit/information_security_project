@@ -18,8 +18,8 @@ string generate_pairing_file(uint rbits, uint qbits, uint seed) {
 
 	mpz_class q, r, h, exp1, exp2;
 	mpz_class temp;
-	int sign0 = 0;
-	int sign1 = 0;
+	int sign0;
+	int sign1;
 
 	// setup randomness
 	gmp_randclass rng(gmp_randinit_default);
@@ -113,9 +113,10 @@ void sha256(unsigned char output[SHA256_DIGEST_LENGTH],
 
 void sha256(mpz_class* output, mpz_class input) {
 	unsigned char hash[SHA256_DIGEST_LENGTH];
-	sha256(hash,
-		   (unsigned char*) input.get_str().c_str(),
-		   input.get_str().length());
+	string input_str = input.get_str();
+	sha256( hash,
+			(unsigned char*) input_str.c_str(),
+			input_str.length() );
 
 	// read hash bitstream and convert to mpz_class directly
 	mpz_import(output->get_mpz_t(), sizeof(hash), 1,
@@ -159,18 +160,14 @@ int main (int argc, char** argv) {
 	pairing_t pairing;
 	setup_pairing(pairing, output_file);
 
-	mpz_class x = 10;
-	mpz_class y;
-	sha256(&y, x);
-	cout << hex << y << "\n";
-	// element_t P;
-	// element_init_G1(P, pairing);
-	// element_random(P);
+	element_t P;
+	element_init_G1(P, pairing);
+	element_random(P);
 
-    // element_t H;
-	// element_init_G1(H, pairing);
+    element_t H;
+	element_init_G1(H, pairing);
 
-	// sha256(H, P);
-	// element_printf("P = %B\n", P);
-	// element_printf("H = %B\n", H);
+	sha256(H, P);
+	element_printf("P = %B\n", P);
+	element_printf("H = %B\n", H);
 }
