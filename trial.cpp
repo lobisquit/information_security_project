@@ -7,8 +7,6 @@
 
 using namespace std;
 
-typedef unsigned int uint;
-
 inline uint to_uint(mpz_class input) {
 	return mpz_get_ui(input.get_mpz_t());
 }
