@@ -5,7 +5,11 @@
 #include <gmpxx.h> // needed for C++ adapter
 #include <pbc.h>
 
+#include <openssl/sha.h>
+
 using namespace std;
+
+typedef unsigned char uchar;
 
 inline uint to_uint(mpz_class input) {
 	return mpz_get_ui(input.get_mpz_t());
@@ -101,6 +105,41 @@ string generate_pairing_file(uint rbits, uint qbits, uint seed) {
 	return string(name_buf);
 }
 
+mpz_class sha256(mpz_class input) {
+	string input_string = input.get_str();
+
+	// intermediate structures
+	uchar hash[SHA256_DIGEST_LENGTH];
+
+	// initialize suitable hasher
+	SHA256_CTX sha256;
+	SHA256_Init(&sha256);
+	SHA256_Update(&sha256, input_string.c_str(), input_string.length());
+	SHA256_Final(hash, &sha256);
+
+	// each of SHA256_DIGEST_LENGTH pieces has 8 bits, so
+	mpz_class output;
+
+	uint bit_mask, bit_index, exponent;
+	uchar current;
+	for (int i = SHA256_DIGEST_LENGTH; i >= 0; i--) {
+		// cycle throgh each bit in hash[i], using bit_mask
+		current = hash[i];
+		bit_mask = 0b1;
+
+		for (bit_index = 7; bit_index > 0; bit_index--) {
+			if (current & bit_mask == 1) {
+				exponent = i * 8 + bit_index;
+				mpz_setbit(output.get_mpz_t(), exponent);
+			}
+			// this mask always shows the bit_index-th bit
+			// in all little endian architecture
+			bit_mask << 1;
+		}
+	}
+	return output;
+}
+
 int main (int argc, char** argv) {
 	uint seed = 1;
 	string output_file = generate_pairing_file(100, 200, seed);
@@ -124,4 +163,6 @@ int main (int argc, char** argv) {
 	element_init_G1(P, pairing);
 	element_random(P);
 	element_printf("P = %B\n", P);
+
+	cout << sha256(10) << "\n";
 }
