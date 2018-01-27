@@ -116,19 +116,10 @@ mpz_class sha256(mpz_class input) {
 	SHA256_Update(&sha256, input_string.c_str(), input_string.length());
 	SHA256_Final(hash, &sha256);
 
-	// convert buffer to hexadecimal representation
-	char output_buffer[65];
-	for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-		// note that each group of 8 bits is converted
-		// into two hexadecimal digits (as format)
-		sprintf(&output_buffer[i * 2], "%02x", hash[i]);
-	}
-	// overwrite last bit
-    output_buffer[64] = 0;
-
-	// convert to mpz number from hexadecimal representation
+	// read hash bitstream and convert to mpz_class directly
 	mpz_class output;
-	output = "0x" + string(output_buffer);
+	mpz_import(output.get_mpz_t(), sizeof(hash), 1,
+			   sizeof(hash[0]), 0, 0, hash);
 	return output;
 }
 
