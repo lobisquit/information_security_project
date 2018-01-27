@@ -103,22 +103,39 @@ string generate_pairing_file(uint rbits, uint qbits, uint seed) {
 	return string(name_buf);
 }
 
-mpz_class sha256(mpz_class input) {
-	// initialize suitable hasher
-	unsigned char hash[SHA256_DIGEST_LENGTH];
+void sha256(unsigned char output[SHA256_DIGEST_LENGTH],
+			unsigned char* input, size_t input_length) {
 	SHA256_CTX sha256;
 	SHA256_Init(&sha256);
+	SHA256_Update(&sha256, input, input_length);
+	SHA256_Final(output, &sha256);
+}
 
-	// compute against input
-	string input_string = input.get_str();
-	SHA256_Update(&sha256, input_string.c_str(), input_string.length());
-	SHA256_Final(hash, &sha256);
+void sha256(mpz_class output, mpz_class input) {
+	unsigned char hash[SHA256_DIGEST_LENGTH];
+	string input_str = input.get_str();
+	sha256(hash,
+		   (unsigned char*) input_str.c_str(),
+		   input_str.length());
 
 	// read hash bitstream and convert to mpz_class directly
-	mpz_class output;
 	mpz_import(output.get_mpz_t(), sizeof(hash), 1,
 			   sizeof(hash[0]), 0, 0, hash);
-	return output;
+}
+
+void sha256(element_t output, element_t input) {
+	// setup output buffer, of length fixed by SHA256 output
+	unsigned char output_buffer[SHA256_DIGEST_LENGTH];
+	memset(output_buffer, '\0', SHA256_DIGEST_LENGTH);
+
+	// read input and save it to buffer
+	uint input_length = element_length_in_bytes(input);
+	unsigned char input_buffer[input_length];
+	element_to_bytes(input_buffer, input);
+
+	// actually compute hash and save to output element
+	sha256(output_buffer, input_buffer, input_length);
+	element_from_hash(output, output_buffer, 64);
 }
 
 int main (int argc, char** argv) {
@@ -142,16 +159,13 @@ int main (int argc, char** argv) {
 
 	element_t P;
 	element_init_G1(P, pairing);
-	element_random(P);
+	element_set0(P);
 	// element_printf("P = %B\n", P);
 
-	mpz_class x = 11;
-	cout << "input: " << x.get_str() << "\n";
-	cout << hex << sha256(x) << "\n";
+    element_t H;
+	element_init_G1(H, pairing);
 
-	// precomputed
-	mpz_class other;
-	other = "0x4fc82b26aecb47d2868c4efbe3581732a3e7cbcc6c2efb32062c08170a05eeb8";
-	cout << hex << other << "\n";
-
+	sha256(H, P);
+	element_printf("P = %B\n", P);
+	element_printf("H = %B\n", H);
 }
