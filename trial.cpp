@@ -1,8 +1,11 @@
 #include <fstream>
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
 
 #include <gmp.h>
 #include <gmpxx.h> // needed for C++ adapter
+#include <math.h>
 #include <pbc.h>
 
 #include <openssl/sha.h>
@@ -152,25 +155,57 @@ void setup_pairing(pairing_t pairing, string pairing_file) {
 	pairing_init_set_buf(pairing, content.c_str(), content.length());
 }
 
+uint encode_string(element_t element, string message) {
+	size_t rbits = mpz_sizeinbase(element->field->order, 2);
+
+	const char* msg_c_str = message.c_str();
+	size_t msg_length = message.length();
+
+	// check string is not too long to encrypt, i.e. rbits chars
+	if (msg_length * sizeof(msg_c_str[0]) * 8 > rbits) {
+		stringstream ss;
+		ss <<  "Message is too long to be transmitted: ";
+		ss << msg_length * sizeof(msg_c_str[0]) * 8 << " bits";
+		ss << " > rbits = " << rbits << " bits";
+		throw invalid_argument(ss.str());
+	}
+
+	mpz_t msg_mpz; mpz_init(msg_mpz);
+	mpz_import(msg_mpz, msg_length, 1, sizeof(msg_c_str[0]), 0, 0, msg_c_str);
+
+	element_set_mpz(element, msg_mpz);
+
+	return msg_length;
+}
+
+string decode_element(element_t input, uint message_length) {
+	mpz_t msg_mpz; mpz_init(msg_mpz);
+	element_to_mpz(msg_mpz, input);
+
+	// maximal output string size, in bits
+	uint max_output_size = (mpz_sizeinbase(msg_mpz, 2) + 7) / 8;
+	char* output = (char*) malloc(sizeof(char) * max_output_size);
+	size_t* count = (size_t*) malloc(sizeof(size_t));
+	mpz_export(output, count, 1, sizeof(char), 1, 0, msg_mpz);
+
+	return string(output, message_length);
+}
+
 int main(int argc, char** argv) {
 	uint seed = 1;
-	string output_filename = generate_pairing_file(100, 200, seed);
+	uint rbits = 512;
+	uint qbits = 200;
+	string output_filename = generate_pairing_file(rbits, qbits, seed);
+
 	pairing_t pairing;
 	setup_pairing(pairing, output_filename);
 
-	element_t a; element_init_G1(a, pairing);
-	element_random(a);
+	// convert string to element_t
+	string msg_str = "Ed egli creò per primi gli Ainur, coloro che ";
 
-	element_t b; element_init_G1(b, pairing);
-	element_random(b);
+	element_t msg; element_init_Zr(msg, pairing);
+	uint length = encode_string(msg, msg_str);
+	string decoded_msg = decode_element(msg, length);
 
-	element_t e; element_init_GT(e, pairing);
-	element_pairing(e, a, b);
-
-	element_printf("e = %B\n", e);
-
-	element_t n; element_init_Zr(n, pairing);
-	sha256(n, e);
-
-	element_printf("n = %B\n", n);
+	cout << decoded_msg << "\n";
 }
