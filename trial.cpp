@@ -152,22 +152,25 @@ void setup_pairing(pairing_t pairing, string pairing_file) {
 	pairing_init_set_buf(pairing, content.c_str(), content.length());
 }
 
-int main (int argc, char** argv) {
+int main(int argc, char** argv) {
 	uint seed = 1;
-
-	// setup crypto pairing given generated spec
-	string output_file = generate_pairing_file(100, 200, seed);
+	string output_filename = generate_pairing_file(100, 200, seed);
 	pairing_t pairing;
-	setup_pairing(pairing, output_file);
+	setup_pairing(pairing, output_filename);
 
-	element_t P;
-	element_init_G1(P, pairing);
-	element_random(P);
+	element_t a; element_init_G1(a, pairing);
+	element_random(a);
 
-    element_t H;
-	element_init_G1(H, pairing);
+	element_t b; element_init_G1(b, pairing);
+	element_random(b);
 
-	sha256(H, P);
-	element_printf("P = %B\n", P);
-	element_printf("H = %B\n", H);
+	element_t e; element_init_GT(e, pairing);
+	element_pairing(e, a, b);
+
+	element_printf("e = %B\n", e);
+
+	element_t n; element_init_Zr(n, pairing);
+	sha256(n, e);
+
+	element_printf("n = %B\n", n);
 }
