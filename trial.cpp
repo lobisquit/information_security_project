@@ -200,12 +200,33 @@ int main(int argc, char** argv) {
 	pairing_t pairing;
 	setup_pairing(pairing, output_filename);
 
-	// convert string to element_t
-	string msg_str = "Ed egli creò per primi gli Ainur, coloro che ";
+	element_t a; element_init_G1(a, pairing);
+	element_t b; element_init_G1(b, pairing);
+	element_random(a);
+	element_random(b);
 
-	element_t msg; element_init_Zr(msg, pairing);
-	uint length = encode_string(msg, msg_str);
-	string decoded_msg = decode_element(msg, length);
+	element_t alpha; element_init_Zr(alpha, pairing);
+	element_t beta; element_init_Zr(beta, pairing);
+	element_random(alpha);
+	element_random(beta);
 
-	cout << decoded_msg << "\n";
+	element_t r1; element_init_GT(r1, pairing);
+	element_t r2; element_init_GT(r2, pairing);
+
+	// left term
+	element_t tempZr; element_init_Zr(tempZr, pairing);
+	element_mul(tempZr, alpha, beta);
+	element_pairing(r1, a, b);
+	element_pow_zn(r1, r1, tempZr);
+
+	// right term
+	element_t a_power; element_init_G1(a_power, pairing);
+	element_t b_power; element_init_G1(b_power, pairing);
+	element_pow_zn(a_power, a, alpha);
+	element_pow_zn(b_power, b, beta);
+
+	element_pairing(r2, a_power, b_power);
+
+	element_printf("r1 = %B\n", r1);
+	element_printf("r2 = %B\n", r2);
 }
