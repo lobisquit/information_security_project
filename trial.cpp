@@ -150,7 +150,6 @@ void sha256(element_t output, element_t* inputs, size_t inputs_size) {
 	element_from_hash(output, output_buffer, SHA256_DIGEST_LENGTH);
 }
 
-
 void sha256(element_t output, element_t input) {
 	// setup output buffer, of length fixed by SHA256 output
 	unsigned char output_buffer[SHA256_DIGEST_LENGTH];
@@ -181,40 +180,41 @@ void setup_pairing(pairing_t pairing, string pairing_file) {
 	pairing_init_set_buf(pairing, content.c_str(), content.length());
 }
 
-uint encode_string(element_t element, string message) {
+void encode_string(element_t element, string message) {
 	size_t rbits = mpz_sizeinbase(element->field->order, 2);
-
-	const char* msg_c_str = message.c_str();
 	size_t msg_length = message.length();
 
 	// check string is not too long to encrypt, i.e. rbits chars
-	if (msg_length * sizeof(msg_c_str[0]) * 8 > rbits) {
+	if (msg_length * 8 > rbits) {
 		stringstream ss;
-		ss <<  "Message is too long to be transmitted: ";
-		ss << msg_length * sizeof(msg_c_str[0]) * 8 << " bits";
+		ss << "Message is too long to be transmitted: ";
+		ss << msg_length * 8 << " bits";
 		ss << " > rbits = " << rbits << " bits";
 		throw invalid_argument(ss.str());
 	}
 
+	string padded_message = message + string(rbits/8 - msg_length, '*');
+	const char* msg_c_str = padded_message.c_str();
+
 	mpz_t msg_mpz; mpz_init(msg_mpz);
-	mpz_import(msg_mpz, msg_length, 1, sizeof(msg_c_str[0]), 0, 0, msg_c_str);
+	mpz_import(msg_mpz, rbits/8, 1, sizeof(char), 0, 0, msg_c_str);
 
 	element_set_mpz(element, msg_mpz);
-
-	return msg_length;
 }
 
-string decode_element(element_t input, uint message_length) {
+string decode_element(element_t input) {
 	mpz_t msg_mpz; mpz_init(msg_mpz);
 	element_to_mpz(msg_mpz, input);
 
-	// maximal output string size, in bits
+	// maximal output string size, in bytes
 	uint max_output_size = (mpz_sizeinbase(msg_mpz, 2) + 7) / 8;
-	char* output = (char*) malloc(sizeof(char) * max_output_size);
-	size_t* count = (size_t*) malloc(sizeof(size_t));
-	mpz_export(output, count, 1, sizeof(char), 1, 0, msg_mpz);
+	char* output_buffer = (char*) malloc(sizeof(char) * max_output_size);
 
-	return string(output, message_length);
+	size_t* count = (size_t*) malloc(sizeof(size_t));
+
+	mpz_export(output_buffer, count, 1, sizeof(char), 1, 0, msg_mpz);
+	uint rbits = mpz_sizeinbase(input->field->order, 2);
+	return string(output_buffer, rbits/8);
 }
 
 int main(int argc, char** argv) {
@@ -237,8 +237,8 @@ int main(int argc, char** argv) {
 	pairing_t pairing;
 	setup_pairing(pairing, output_filename);
 
-	// setup G1 generator (every non-zero element suits,
-	// since its order is prime)
+	// setup G1 generator (every non-zero element
+	// suits, since its order is prime)
 	element_t g; element_init_G1(g, pairing);
 	do { element_random(g); } while (element_is0(g));
 
@@ -320,7 +320,7 @@ int main(int argc, char** argv) {
 	element_pairing(shared_key, pri_keyA, tempG1);
 
 	/* EncM */
-	string message_str = "Ed egli creò per primi gli Ainur, coloro che";
+	string message_str = "The quick brown fox jumps over the lazy dog";
 
 	element_t message; element_init_Zr(message, pairing);
 	encode_string(message, message_str);
@@ -396,8 +396,9 @@ int main(int argc, char** argv) {
 	element_t message_prime; element_init_Zr(message_prime, pairing);
 	element_sub(message_prime, cyphertext, tempZr);
 
-	cout << decode_element(message, message_str.length()) << "\n";
-	cout << decode_element(message_prime, message_str.length()) << "\n";
+	// cout << decode_element(message, message_str.length()) << "\n";
+	cout << decode_element(message) << "\n";
+	cout << decode_element(message_prime) << "\n";
 
 	cout << "message: "
 		 << ((element_cmp(message, message_prime) == 0) ? "ok" : "ERROR")
