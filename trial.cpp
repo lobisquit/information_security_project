@@ -126,6 +126,31 @@ void sha256(mpz_class* output, mpz_class input) {
 			   sizeof(hash[0]), 0, 0, hash);
 }
 
+void sha256(element_t output, element_t* inputs, size_t inputs_size) {
+	// setup output buffer, of length fixed by SHA256 output
+	unsigned char output_buffer[SHA256_DIGEST_LENGTH];
+	memset(output_buffer, '\0', SHA256_DIGEST_LENGTH);
+
+	// compute size of buffer containing all inputs
+	size_t total_length = 0;
+	for (int i = 0; i < inputs_size; i++) {
+		total_length += element_length_in_bytes(inputs[i]);
+	}
+
+	// collect all inputs in same buffer
+	unsigned char input_buffer[total_length];
+	size_t previous_ptr = 0;
+	for (int i = 0; i < inputs_size; i++) {
+		element_to_bytes(input_buffer + previous_ptr, inputs[i]);
+		previous_ptr = element_length_in_bytes(inputs[i]);
+	}
+
+	// actually compute hash and save to output element
+	sha256(output_buffer, input_buffer, total_length);
+	element_from_hash(output, output_buffer, SHA256_DIGEST_LENGTH);
+}
+
+
 void sha256(element_t output, element_t input) {
 	// setup output buffer, of length fixed by SHA256 output
 	unsigned char output_buffer[SHA256_DIGEST_LENGTH];
@@ -134,11 +159,12 @@ void sha256(element_t output, element_t input) {
 	// read input and save it to buffer
 	uint input_length = element_length_in_bytes(input);
 	unsigned char input_buffer[input_length];
+	memset(input_buffer, '\0', SHA256_DIGEST_LENGTH);
 	element_to_bytes(input_buffer, input);
 
 	// actually compute hash and save to output element
 	sha256(output_buffer, input_buffer, input_length);
-	element_from_hash(output, output_buffer, 64);
+	element_from_hash(output, output_buffer, SHA256_DIGEST_LENGTH);
 }
 
 void setup_pairing(pairing_t pairing, string pairing_file) {
@@ -192,41 +218,202 @@ string decode_element(element_t input, uint message_length) {
 }
 
 int main(int argc, char** argv) {
-	uint seed = 1;
-	uint rbits = 512;
-	uint qbits = 200;
-	string output_filename = generate_pairing_file(rbits, qbits, seed);
+	/* INIT (done by GW)
+		Input:
+			- random seed
+		Output:
+			- pairing
+			- private key pub_keyGW ∈ Zr
+			- public key pri_keyGW ∈ G1
+			- id, pri_key for all veicoles
+	*/
 
+	// setup crypto pairing given generated specs
+	uint seed = time(NULL);
+	uint rbits = 512;
+	uint qbits = 1024;
+
+	string output_filename = generate_pairing_file(512, 1024, seed);
 	pairing_t pairing;
 	setup_pairing(pairing, output_filename);
 
-	element_t a; element_init_G1(a, pairing);
-	element_t b; element_init_G1(b, pairing);
-	element_random(a);
-	element_random(b);
+	// setup G1 generator (every non-zero element suits,
+	// since its order is prime)
+	element_t g; element_init_G1(g, pairing);
+	do { element_random(g); } while (element_is0(g));
 
-	element_t alpha; element_init_Zr(alpha, pairing);
-	element_t beta; element_init_Zr(beta, pairing);
-	element_random(alpha);
-	element_random(beta);
+	element_t pri_keyGW; element_init_Zr(pri_keyGW, pairing);
+	element_random(pri_keyGW);
 
-	element_t r1; element_init_GT(r1, pairing);
-	element_t r2; element_init_GT(r2, pairing);
+	element_t pub_keyGW; element_init_G1(pub_keyGW, pairing);
+	// pub_key = g^{pri_key}
+	element_pow_zn(pub_keyGW, g, pri_keyGW);
 
-	// left term
+	// do forall veicoles to manage
+	// checking that they are all different
+	element_t idA; element_init_G1(idA, pairing);
+	element_t idB; element_init_G1(idB, pairing);
+	element_random(idA);
+	element_random(idB);
+
+	element_t pri_keyA; element_init_G1(pri_keyA, pairing);
+	element_t pri_keyB; element_init_G1(pri_keyB, pairing);
+	// pri_key = id^{pri_keyGW}
+	element_pow_zn(pri_keyA, idA, pri_keyGW);
+	element_pow_zn(pri_keyB, idB, pri_keyGW);
+
+	/* Network discovery phase (done by a veicole)
+		Input:
+			- real identity of veicole, id
+			- Nonce n
+		Output:
+			- tid, temporary identity (for tx round)
+			- pub_key, veicole temporary public key
+	*/
+	element_t nA; element_init_Zr(nA, pairing);
+	element_t nB; element_init_Zr(nB, pairing);
+	element_random(nA);
+	element_random(nB);
+
+	element_t tidA; element_init_G1(tidA, pairing);
+	element_t tidB; element_init_G1(tidB, pairing);
+	element_pow_zn(tidA, idA, nA);
+	element_pow_zn(tidB, idB, nB);
+
+	element_t pub_keyA; element_init_G1(pub_keyA, pairing);
+	element_t pub_keyB; element_init_G1(pub_keyB, pairing);
+	element_pow_zn(pub_keyA, g, nA);
+	element_pow_zn(pub_keyB, g, nB);
+
+	/* Data TX phase */
+
+	/* Anony */
+
+	// compute nonces
+	element_t rA; element_init_Zr(rA, pairing);
+	element_t rB; element_init_Zr(rB, pairing);
+	element_random(rA);
+	element_random(rB);
+
+	element_t otiA; element_init_G1(otiA, pairing);
+	element_t otiB; element_init_G1(otiB, pairing);
+	element_pow_zn(otiA, tidA, rA);
+	element_pow_zn(otiB, g, rB);
+
+	element_t t; element_init_GT(t, pairing);
+	element_pairing(t, tidB, pub_keyGW);
+	element_pow_zn(t, t, rB);
+
 	element_t tempZr; element_init_Zr(tempZr, pairing);
-	element_mul(tempZr, alpha, beta);
-	element_pairing(r1, a, b);
-	element_pow_zn(r1, r1, tempZr);
+	sha256(tempZr, t);
 
-	// right term
-	element_t a_power; element_init_G1(a_power, pairing);
-	element_t b_power; element_init_G1(b_power, pairing);
-	element_pow_zn(a_power, a, alpha);
-	element_pow_zn(b_power, b, beta);
+	element_t paramsA; element_init_Zr(paramsA, pairing);
+	element_t paramsB; element_init_Zr(paramsB, pairing);
+	element_add(paramsA, rA, tempZr);
+	element_add(paramsB, rB, tempZr);
 
-	element_pairing(r2, a_power, b_power);
+	/* GenkA */
+	element_t tempG1; element_init_G1(tempG1, pairing);
+	element_pow_zn(tempG1, tidB, nA);
 
-	element_printf("r1 = %B\n", r1);
-	element_printf("r2 = %B\n", r2);
+	element_t shared_key; element_init_GT(shared_key, pairing);
+	element_pairing(shared_key, pri_keyA, tempG1);
+
+	/* EncM */
+	string message_str = "Ed egli creò per primi gli Ainur, coloro che";
+
+	element_t message; element_init_Zr(message, pairing);
+	encode_string(message, message_str);
+
+	sha256(tempZr, shared_key);
+	element_t cyphertext; element_init_Zr(cyphertext, pairing);
+	element_add(cyphertext, message, tempZr);
+
+	/* SignM */
+
+	// sign both shared_key *and* message
+
+	element_t sign; element_init_Zr(sign, pairing);
+	element_t temp[2] = {*shared_key, *message};
+	sha256(sign, temp, 2);
+
+	/* B */
+
+	/* Extr */
+	element_t t_prime; element_init_GT(t_prime, pairing);
+	element_pow_zn(tempG1, otiB, nB);
+	element_pairing(t_prime, pri_keyB, tempG1);
+
+	cout << "t: "
+		 << ((element_cmp(t, t_prime) == 0) ? "ok" : "ERROR")
+		 << "\n";
+
+	uint t_length = element_length_in_bytes(t);
+	unsigned char t_buffer[t_length];
+	element_to_bytes(t_buffer, t);
+
+	uint t_prime_length = element_length_in_bytes(t_prime);
+	unsigned char t_prime_buffer[t_prime_length];
+	element_to_bytes(t_prime_buffer, t_prime);
+
+	element_t rA_prime; element_init_Zr(rA_prime, pairing);
+	element_t rB_prime; element_init_Zr(rB_prime, pairing);
+
+	sha256(tempZr, t_prime);
+
+	// element_printf("h(t_prime) = %B\n", tempZr);
+
+	element_sub(rA_prime, paramsA, tempZr);
+	element_sub(rB_prime, paramsB, tempZr);
+
+	cout << "rA: "
+		 << ((element_cmp(rA, rA_prime) == 0) ? "ok" : "ERROR") << "\n"
+		 << "rB: "
+		 << ((element_cmp(rB, rB_prime) == 0) ? "ok" : "ERROR")
+		 << "\n";
+
+	element_pow_zn(tempG1, g, rB);
+	cout << "otiB: "
+		 << ((element_cmp(otiB, tempG1) == 0) ? "ok" : "ERROR")
+		 << "\n";
+
+	element_t tidA_prime; element_init_G1(tidA_prime, pairing);
+	element_invert(tempZr, rA_prime);
+	element_pow_zn(tidA_prime, otiA, tempZr);
+
+	cout << "tidA: "
+		 << ((element_cmp(tidA, tidA_prime) == 0) ? "ok" : "ERROR")
+		 << "\n";
+
+	/* GenkB */
+	element_t shared_key_prime; element_init_GT(shared_key_prime, pairing);
+	element_pow_zn(tempG1, tidA_prime, nB);
+	element_pairing(shared_key_prime, tempG1, pri_keyB);
+
+	sha256(tempZr, shared_key_prime);
+
+	/* DecM */
+	element_t message_prime; element_init_Zr(message_prime, pairing);
+	element_sub(message_prime, cyphertext, tempZr);
+
+	cout << decode_element(message, message_str.length()) << "\n";
+	cout << decode_element(message_prime, message_str.length()) << "\n";
+
+	cout << "message: "
+		 << ((element_cmp(message, message_prime) == 0) ? "ok" : "ERROR")
+		 << "\n";
+
+	/* VerM */
+	cout << "shared_key: "
+		 << ((element_cmp(shared_key, shared_key_prime) == 0) ? "ok" : "ERROR")
+		 << "\n";
+
+	// unsigned char output_buffer[SHA256_DIGEST_LENGTH];
+	element_t sign_prime; element_init_Zr(sign_prime, pairing);
+	element_t temp_prime[2] = {*shared_key_prime, *message_prime};
+	sha256(sign_prime, temp_prime, 2);
+
+	cout << "sign: "
+		 << ((element_cmp(sign, sign_prime) == 0) ? "ok" : "ERROR")
+		 << "\n";
 }
