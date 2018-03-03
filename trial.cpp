@@ -16,7 +16,7 @@ inline uint to_uint(mpz_class input) {
 	return mpz_get_ui(input.get_mpz_t());
 }
 
-string generate_pairing_file(uint rbits, uint qbits, uint seed) {
+void generate_pairing_file(pairing_t pairing, uint rbits, uint qbits, uint seed) {
 	bool found = false;
 
 	mpz_class q, r, h, exp1, exp2;
@@ -84,15 +84,9 @@ string generate_pairing_file(uint rbits, uint qbits, uint seed) {
 		}
 	} while(!found);
 
-	// build output file name using seed as parameter
-	char name_buf[50];
-	sprintf(name_buf, "a-seed=%d.param", seed);
-
-	ofstream conf_file;
-	conf_file.open(name_buf);
-
-	// create conf file, suitable for PBC parameter specification
-	conf_file << "type a" << "\n";
+	// create conf file in buffer, suitable for PBC parameter specification
+	std::stringstream conf_file;
+	conf_file << "type a"           << "\n";
 	conf_file << "q "      << q     << "\n";
 	conf_file << "r "      << r     << "\n";
 	conf_file << "h "      << h     << "\n";
@@ -100,10 +94,11 @@ string generate_pairing_file(uint rbits, uint qbits, uint seed) {
 	conf_file << "exp2 "   << exp2  << "\n";
 	conf_file << "sign0 "  << sign0 << "\n";
 	conf_file << "sign1 "  << sign1 << "\n";
+	std::string pairing_setup = conf_file.str();
 
-	conf_file.close();
-
-	return string(name_buf);
+	pairing_init_set_buf(pairing,
+						 pairing_setup.c_str(),
+						 pairing_setup.length());
 }
 
 void sha256(unsigned char output[SHA256_DIGEST_LENGTH],
@@ -151,33 +146,8 @@ void sha256(element_t output, element_t* inputs, size_t inputs_size) {
 }
 
 void sha256(element_t output, element_t input) {
-	// setup output buffer, of length fixed by SHA256 output
-	unsigned char output_buffer[SHA256_DIGEST_LENGTH];
-	memset(output_buffer, '\0', SHA256_DIGEST_LENGTH);
-
-	// read input and save it to buffer
-	uint input_length = element_length_in_bytes(input);
-	unsigned char input_buffer[input_length];
-	memset(input_buffer, '\0', SHA256_DIGEST_LENGTH);
-	element_to_bytes(input_buffer, input);
-
-	// actually compute hash and save to output element
-	sha256(output_buffer, input_buffer, input_length);
-	element_from_hash(output, output_buffer, SHA256_DIGEST_LENGTH);
-}
-
-void setup_pairing(pairing_t pairing, string pairing_file) {
-	ifstream conf_stream;
-	conf_stream.open(pairing_file.c_str());
-
-	// collect all file content
-	string line, content;
-	while (getline(conf_stream, line)) {
-		content += line + "\n";
-	}
-	conf_stream.close();
-
-	pairing_init_set_buf(pairing, content.c_str(), content.length());
+	element_t inputs[] = {*input};
+	sha256(output, inputs, 1);
 }
 
 void encode_string(element_t element, string message) {
@@ -202,7 +172,7 @@ void encode_string(element_t element, string message) {
 	element_set_mpz(element, msg_mpz);
 }
 
-string decode_element(element_t input) {
+void decode_element(string* str, element_t input) {
 	mpz_t msg_mpz; mpz_init(msg_mpz);
 	element_to_mpz(msg_mpz, input);
 
@@ -214,7 +184,7 @@ string decode_element(element_t input) {
 
 	mpz_export(output_buffer, count, 1, sizeof(char), 1, 0, msg_mpz);
 	uint rbits = mpz_sizeinbase(input->field->order, 2);
-	return string(output_buffer, rbits/8);
+	*str = string(output_buffer, rbits/8);
 }
 
 int main(int argc, char** argv) {
@@ -233,9 +203,8 @@ int main(int argc, char** argv) {
 	uint rbits = 512;
 	uint qbits = 1024;
 
-	string output_filename = generate_pairing_file(512, 1024, seed);
 	pairing_t pairing;
-	setup_pairing(pairing, output_filename);
+	generate_pairing_file(pairing, rbits, qbits, seed);
 
 	// setup G1 generator (every non-zero element
 	// suits, since its order is prime)
@@ -397,8 +366,11 @@ int main(int argc, char** argv) {
 	element_sub(message_prime, cyphertext, tempZr);
 
 	// cout << decode_element(message, message_str.length()) << "\n";
-	cout << decode_element(message) << "\n";
-	cout << decode_element(message_prime) << "\n";
+	std::string out;
+	decode_element(&out, message);
+	cout << out << "\n";
+	decode_element(&out, message_prime);
+	cout << out << "\n";
 
 	cout << "message: "
 		 << ((element_cmp(message, message_prime) == 0) ? "ok" : "ERROR")
