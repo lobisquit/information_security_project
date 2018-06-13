@@ -187,6 +187,17 @@ void decode_element(string* str, element_t input) {
 	*str = string(output_buffer, rbits/8);
 }
 
+inline std::string to_string(element_t e) {
+	unsigned char data[element_length_in_bytes(e)];
+	element_to_bytes(data, e);
+	return std::string((char*) data);
+}
+
+inline int to_element(element_t e, std::string data) {
+	unsigned char* raw_data = (unsigned char*) data.c_str();
+    return element_from_bytes(e, raw_data);
+}
+
 int main(int argc, char** argv) {
 	/* INIT (done by GW)
 		Input:
@@ -218,6 +229,8 @@ int main(int argc, char** argv) {
 	// pub_key = g^{pri_key}
 	element_pow_zn(pub_keyGW, g, pri_keyGW);
 
+	//////////////////////////////////////////
+
 	// do forall veicoles to manage
 	// checking that they are all different
 	element_t idA; element_init_G1(idA, pairing);
@@ -244,9 +257,9 @@ int main(int argc, char** argv) {
 	element_random(nA);
 	element_random(nB);
 
-	element_t tidA; element_init_G1(tidA, pairing);
+	element_t tidA; element_init_G1(tidA, pairing); // <- INIT
 	element_t tidB; element_init_G1(tidB, pairing);
-	element_pow_zn(tidA, idA, nA);
+	element_pow_zn(tidA, idA, nA); // <- INIT + refreshTID
 	element_pow_zn(tidB, idB, nB);
 
 	element_t pub_keyA; element_init_G1(pub_keyA, pairing);
